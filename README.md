@@ -8,9 +8,10 @@ A CLI tool that connects to the [IcyBox](https://www.icybox.io) activity stream,
 
 - **Collects** live box-opening events via SSE (Server-Sent Events) or polling
 - **Persists** events to a local JSONL file with deduplication
+- **Saves rejected events** to a separate file so nothing from the stream is ever lost
 - **Analyzes** collected data to produce:
-  - Box tier distribution (Bronze, Silver, Gold, Icy)
-  - Rarity odds per box (quartz, automatic, chronograph, tourbillon)
+  - Box tier distribution (dynamically detected from data)
+  - Rarity odds per box (all rarities detected automatically)
   - Value vs cost breakdown showing total money in, total money out, and IcyBox's profit margin
   - Rarity cross-tabulation across all tiers
   - Value statistics (min, max, mean, median, std dev) per tier and rarity
@@ -102,6 +103,8 @@ Events are stored as JSON Lines (`.jsonl`), one event per line:
   "collectedAt": "2024-01-15T10:30:05.123Z"
 }
 ```
+
+Events that fail validation (missing required fields, unparseable values) are saved to a separate `*-rejected.jsonl` file alongside the main data file. This ensures nothing from the API stream is ever discarded.
 
 ## Development
 

@@ -25,7 +25,7 @@ const program = new Command();
 
 program
   .name('icybox')
-  .version('1.0.0')
+  .version('2.0.0')
   .description('IcyBox Stream Analyzer — Collect and analyze IcyBox box-opening events');
 
 // ── collect subcommand ──
@@ -88,6 +88,11 @@ async function runCollect(options: CollectOptions): Promise<void> {
   // 2. Set up the data writer
   const writer = new DataWriter(options.dataFile);
 
+  // 2b. Set up the bad event writer — rejected events go here so nothing is lost
+  const badEventFile = options.dataFile.replace(/\.jsonl$/, '-rejected.jsonl');
+  const badWriter = new DataWriter(badEventFile);
+  let badEventCount = 0;
+
   // 3. Track new events for periodic logging
   let newEventCount = 0;
   let lastLogTime = Date.now();
@@ -98,6 +103,10 @@ async function runCollect(options: CollectOptions): Promise<void> {
     for (const raw of rawEvents) {
       const event: IcyBoxEvent | null = validateEvent(raw);
       if (event === null) {
+        // Persist rejected event so nothing is lost
+        const rejected = { raw, rejectedAt: new Date().toISOString(), reason: 'failed validation' };
+        await badWriter.append(rejected as unknown as StoredEvent);
+        badEventCount++;
         continue;
       }
 
@@ -151,7 +160,11 @@ async function runCollect(options: CollectOptions): Promise<void> {
     console.log('\n[icybox] Shutting down...');
     disconnect();
     await writer.close();
+    await badWriter.close();
     console.log(`[icybox] Final count: ${newEventCount} new events persisted this session`);
+    if (badEventCount > 0) {
+      console.log(`[icybox] ${badEventCount} rejected events saved to ${badEventFile}`);
+    }
     process.exit(0);
   };
 

@@ -100,8 +100,9 @@ describe('validateEvent', () => {
     }
   });
 
-  it('returns null for invalid rarity', () => {
-    expect(validateEvent({ ...validRaw, rarity: 'legendary' })).toBeNull();
+  it('accepts any rarity string', () => {
+    expect(validateEvent({ ...validRaw, rarity: 'legendary' })).not.toBeNull();
+    expect(validateEvent({ ...validRaw, rarity: 'grand_tourbillon' })).not.toBeNull();
   });
 
   it('returns null for invalid acquiredAt', () => {

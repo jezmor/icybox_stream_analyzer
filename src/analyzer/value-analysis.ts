@@ -7,8 +7,6 @@ import type {
   ValueStats,
 } from '../types.js';
 
-const ALL_TIERS: readonly BoxTier[] = ['Bronze', 'Silver', 'Gold', 'Icy'] as const;
-const ALL_RARITIES: readonly Rarity[] = ['quartz', 'automatic', 'chronograph', 'tourbillon'] as const;
 
 /**
  * Computes the median of a sorted array of numbers.
@@ -129,9 +127,8 @@ export function analyzeValues(data: AccumulatedData): {
 } {
   // --- Per-tier value stats (Req 6.1, 6.4) ---
   const byTier = new Map<BoxTier, ValueStats>();
-  for (const tier of ALL_TIERS) {
-    const tierEvents = data.byTier.get(tier);
-    if (tierEvents !== undefined && tierEvents.length > 0) {
+  for (const [tier, tierEvents] of data.byTier) {
+    if (tierEvents.length > 0) {
       const stats = computeValueStats(extractValues(tierEvents));
       if (stats !== undefined) {
         byTier.set(tier, stats);
@@ -141,9 +138,8 @@ export function analyzeValues(data: AccumulatedData): {
 
   // --- Per-rarity value stats (Req 6.2) ---
   const byRarity = new Map<Rarity, Omit<ValueStats, 'stdDev'>>();
-  for (const rarity of ALL_RARITIES) {
-    const rarityEvents = data.byRarity.get(rarity);
-    if (rarityEvents !== undefined && rarityEvents.length > 0) {
+  for (const [rarity, rarityEvents] of data.byRarity) {
+    if (rarityEvents.length > 0) {
       const stats = computeBasicValueStats(extractValues(rarityEvents));
       if (stats !== undefined) {
         byRarity.set(rarity, stats);

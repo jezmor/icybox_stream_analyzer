@@ -1,23 +1,17 @@
 import type { AccumulatedData, BoxTier, StoredEvent } from '../types.js';
 
-const VALID_TIERS: ReadonlySet<string> = new Set<BoxTier>(['Bronze', 'Silver', 'Gold', 'Icy']);
-
 /**
  * Extracts the BoxTier from a box name string.
- * Box names contain the tier name (e.g., "Gold Box" → "Gold").
- * Returns undefined if no valid tier is found.
+ * Strips " Box" suffix if present (e.g., "Gold Box" → "Gold", "Ice Box" → "Ice").
+ * Maps known aliases (e.g., "Ice" → "Icy").
  */
-function extractTier(boxName: string): BoxTier | undefined {
+function extractTier(boxName: string): BoxTier {
+  let tier = boxName.replace(/\s*Box$/i, '').trim();
   // API sends "Ice Box" for the Icy tier
-  if (boxName.includes('Ice')) {
-    return 'Icy';
+  if (tier === 'Ice') {
+    tier = 'Icy';
   }
-  for (const tier of VALID_TIERS) {
-    if (boxName.includes(tier)) {
-      return tier as BoxTier;
-    }
-  }
-  return undefined;
+  return tier;
 }
 
 /**
@@ -55,13 +49,11 @@ export async function accumulate(
 
     // --- byTier ---
     const tier = extractTier(event.boxName);
-    if (tier !== undefined) {
-      const tierEvents = byTier.get(tier);
-      if (tierEvents !== undefined) {
-        tierEvents.push(event);
-      } else {
-        byTier.set(tier, [event]);
-      }
+    const tierEvents = byTier.get(tier);
+    if (tierEvents !== undefined) {
+      tierEvents.push(event);
+    } else {
+      byTier.set(tier, [event]);
     }
 
     // --- byRarity ---

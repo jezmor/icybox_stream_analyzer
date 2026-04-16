@@ -1,11 +1,4 @@
-import type { IcyBoxEvent, ParseResult, Rarity } from '../types.js';
-
-const VALID_RARITIES: ReadonlySet<string> = new Set<Rarity>([
-  'quartz',
-  'automatic',
-  'chronograph',
-  'tourbillon',
-]);
+import type { IcyBoxEvent, ParseResult } from '../types.js';
 
 const REQUIRED_FIELDS = [
   'id',
@@ -106,8 +99,8 @@ export function validateEvent(raw: unknown): IcyBoxEvent | null {
     return null;
   }
 
-  // Validate rarity
-  if (typeof obj.rarity !== 'string' || !VALID_RARITIES.has(obj.rarity)) {
+  // Validate rarity is a non-empty string
+  if (typeof obj.rarity !== 'string' || obj.rarity.trim() === '') {
     return null;
   }
 
@@ -128,7 +121,7 @@ export function validateEvent(raw: unknown): IcyBoxEvent | null {
     boxSlug: typeof obj.boxSlug === 'string' ? obj.boxSlug as string : '',
     itemName: obj.itemName as string,
     itemValue,
-    rarity: obj.rarity as Rarity,
+    rarity: obj.rarity as string,
     rarityColor: typeof obj.rarityColor === 'string' ? obj.rarityColor as string : '',
     itemImageUrl: typeof obj.itemImageUrl === 'string' ? obj.itemImageUrl as string : '',
     acquiredAt,
@@ -199,8 +192,8 @@ function getMalformedReason(raw: unknown): string {
     return `Invalid itemValue type: ${typeof obj.itemValue}`;
   }
 
-  if (typeof obj.rarity === 'string' && !VALID_RARITIES.has(obj.rarity)) {
-    return `Invalid rarity: ${obj.rarity}`;
+  if (typeof obj.rarity === 'string' && obj.rarity.trim() === '') {
+    return 'Empty rarity';
   }
 
   if (typeof obj.acquiredAt === 'string') {

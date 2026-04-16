@@ -1,15 +1,6 @@
-import type {
-  BoxTier,
-  Rarity,
-  ReportData,
-  TierStats,
-  RarityStats,
-} from '../types.js';
+import type { ReportData, TierStats, RarityStats } from '../types.js';
 
-const ALL_TIERS: readonly BoxTier[] = ['Bronze', 'Silver', 'Gold', 'Icy'] as const;
-const ALL_RARITIES: readonly Rarity[] = ['quartz', 'automatic', 'chronograph', 'tourbillon'] as const;
-
-const BOX_COST: Record<BoxTier, number> = {
+const BOX_COST: Record<string, number> = {
   Bronze: 50,
   Silver: 100,
   Gold: 500,
@@ -57,9 +48,9 @@ export function formatConsoleReport(data: ReportData): string {
   const sections: string[] = [];
   sections.push(formatSummarySection(data));
   sections.push(formatTierSection(data.tierStats));
-  sections.push(formatOddsPerBoxSection(data.rarityStats));
+  sections.push(formatOddsPerBoxSection(data.tierStats, data.rarityStats));
   sections.push(formatValueVsCostSection(data));
-  sections.push(formatRaritySection(data.rarityStats));
+  sections.push(formatRaritySection(data.tierStats, data.rarityStats));
   sections.push(formatValueSection(data));
   return sections.join('\n\n');
 }
@@ -96,20 +87,21 @@ function formatValueVsCostSection(data: ReportData): string {
   let grandIn = 0;
   let grandOut = 0;
 
-  for (const tier of ALL_TIERS) {
-    const cost = BOX_COST[tier];
-    const vs = data.valueAnalysis.byTier.get(tier);
-    const tierStat = data.tierStats.find((t) => t.tier === tier);
-    const count = tierStat?.count ?? 0;
-    if (vs && count > 0) {
-      const totalIn = cost * count;
-      const totalOut = vs.mean * count;
+  for (const ts of data.tierStats) {
+    const cost = BOX_COST[ts.tier];
+    const vs = data.valueAnalysis.byTier.get(ts.tier);
+    if (cost !== undefined && vs && ts.count > 0) {
+      const totalIn = cost * ts.count;
+      const totalOut = vs.mean * ts.count;
       const profit = totalIn - totalOut;
       const returnPct = (vs.mean / cost) * 100;
-      grandCount += count;
+      grandCount += ts.count;
       grandIn += totalIn;
       grandOut += totalOut;
-      lines.push('  ' + pad(tier, tierW) + padLeft(count.toLocaleString(), colW) + padLeft(fmtMoney(cost), colW) + padLeft(fmtMoney(totalIn), colW) + padLeft(fmtMoney(totalOut), colW) + padLeft(fmtMoney(profit), colW) + padLeft(pct(returnPct), colW));
+      lines.push('  ' + pad(ts.tier, tierW) + padLeft(ts.count.toLocaleString(), colW) + padLeft(fmtMoney(cost), colW) + padLeft(fmtMoney(totalIn), colW) + padLeft(fmtMoney(totalOut), colW) + padLeft(fmtMoney(profit), colW) + padLeft(pct(returnPct), colW));
+    } else if (vs && ts.count > 0) {
+      // Unknown tier cost — show what we can
+      lines.push('  ' + pad(ts.tier, tierW) + padLeft(ts.count.toLocaleString(), colW) + padLeft('???', colW) + padLeft('???', colW) + padLeft(fmtMoney(vs.mean * ts.count), colW) + padLeft('???', colW) + padLeft('???', colW));
     }
   }
 
@@ -128,35 +120,35 @@ function formatValueVsCostSection(data: ReportData): string {
   return lines.join('\n');
 }
 
-function formatOddsPerBoxSection(rarityStats: RarityStats[]): string {
+function formatOddsPerBoxSection(tierStats: TierStats[], rarityStats: RarityStats[]): string {
   const lines: string[] = [];
   lines.push(sectionHeader('Rarity Odds per Box'));
-  const rarityW = 16; const oddsW = 12;
-  for (const tier of ALL_TIERS) {
-    lines.push('\n  ' + tier + ' Box:');
+  const rarityW = 18; const oddsW = 12;
+  for (const ts of tierStats) {
+    lines.push('\n  ' + ts.tier + ' Box:');
     lines.push('  ' + pad('Rarity', rarityW) + padLeft('Odds', oddsW));
     lines.push('  ' + separator('─', rarityW + oddsW));
-    for (const rarity of ALL_RARITIES) {
-      const rs = rarityStats.find((r) => r.rarity === rarity);
-      const tierData = rs?.byTier.get(tier);
+    for (const rs of rarityStats) {
+      const tierData = rs.byTier.get(ts.tier);
       const percentage = tierData?.percentage ?? 0;
-      lines.push('  ' + pad(rarity, rarityW) + padLeft(pct(percentage), oddsW));
+      lines.push('  ' + pad(rs.rarity, rarityW) + padLeft(pct(percentage), oddsW));
     }
   }
   return lines.join('\n');
 }
 
-function formatRaritySection(rarityStats: RarityStats[]): string {
+function formatRaritySection(tierStats: TierStats[], rarityStats: RarityStats[]): string {
   const lines: string[] = [];
   lines.push(sectionHeader('Rarity Distribution (Cross-Tabulation)'));
-  const rarityW = 14; const totalW = 10; const pctColW = 10; const tierW = 12;
+  const tiers = tierStats.map(t => t.tier);
+  const rarityW = 18; const totalW = 10; const pctColW = 10; const tierW = 14;
   let header = '  ' + pad('Rarity', rarityW) + padLeft('Total', totalW) + padLeft('Pct', pctColW);
-  for (const tier of ALL_TIERS) { header += padLeft(tier, tierW); }
+  for (const tier of tiers) { header += padLeft(tier, tierW); }
   lines.push(header);
-  lines.push('  ' + separator('─', rarityW + totalW + pctColW + ALL_TIERS.length * tierW));
+  lines.push('  ' + separator('─', rarityW + totalW + pctColW + tiers.length * tierW));
   for (const rs of rarityStats) {
     let row = '  ' + pad(rs.rarity, rarityW) + padLeft(rs.totalCount.toLocaleString(), totalW) + padLeft(pct(rs.totalPercentage), pctColW);
-    for (const tier of ALL_TIERS) {
+    for (const tier of tiers) {
       const tierData = rs.byTier.get(tier);
       const cellText = tierData ? tierData.count + ' (' + pct(tierData.percentage) + ')' : '0 (0.00%)';
       row += padLeft(cellText, tierW);
@@ -176,69 +168,16 @@ function formatValueSection(data: ReportData): string {
   const tierW = 10; const statW = 12;
   lines.push('  ' + pad('Tier', tierW) + padLeft('Min', statW) + padLeft('Max', statW) + padLeft('Mean', statW) + padLeft('Median', statW) + padLeft('StdDev', statW));
   lines.push('  ' + separator('─', tierW + statW * 5));
-  for (const tier of ALL_TIERS) {
-    const vs = data.valueAnalysis.byTier.get(tier);
-    if (vs) {
-      lines.push('  ' + pad(tier, tierW) + padLeft(fmtDollars(vs.min), statW) + padLeft(fmtDollars(vs.max), statW) + padLeft(fmtDollars(vs.mean), statW) + padLeft(fmtDollars(vs.median), statW) + padLeft(fmtDollars(vs.stdDev), statW));
-    }
+  for (const [tier, vs] of data.valueAnalysis.byTier) {
+    lines.push('  ' + pad(tier, tierW) + padLeft(fmtDollars(vs.min), statW) + padLeft(fmtDollars(vs.max), statW) + padLeft(fmtDollars(vs.mean), statW) + padLeft(fmtDollars(vs.median), statW) + padLeft(fmtDollars(vs.stdDev), statW));
   }
   lines.push('');
 
   lines.push('  Value by Rarity:');
-  lines.push('  ' + pad('Rarity', 14) + padLeft('Min', statW) + padLeft('Max', statW) + padLeft('Mean', statW) + padLeft('Median', statW));
-  lines.push('  ' + separator('─', 14 + statW * 4));
-  for (const rarity of ALL_RARITIES) {
-    const vs = data.valueAnalysis.byRarity.get(rarity);
-    if (vs) {
-      lines.push('  ' + pad(rarity, 14) + padLeft(fmtDollars(vs.min), statW) + padLeft(fmtDollars(vs.max), statW) + padLeft(fmtDollars(vs.mean), statW) + padLeft(fmtDollars(vs.median), statW));
-    }
-  }
-  return lines.join('\n');
-}
-
-function formatUserSection(data: ReportData): string {
-  const lines: string[] = [];
-  lines.push(sectionHeader('User Activity'));
-  const ua = data.userActivity;
-  lines.push('  Unique Users:          ' + ua.uniqueUsers.toLocaleString());
-  lines.push('  Openings per User:');
-  lines.push('    Min: ' + ua.openingsPerUser.min + '  Max: ' + ua.openingsPerUser.max + '  Mean: ' + ua.openingsPerUser.mean.toFixed(2) + '  Median: ' + ua.openingsPerUser.median);
-  lines.push('');
-  lines.push('  Top 10 Users:');
-  const nameW = 24; const countW = 10;
-  lines.push('  ' + pad('Username', nameW) + padLeft('Openings', countW));
-  lines.push('  ' + separator('─', nameW + countW));
-  for (const user of ua.topUsers) {
-    lines.push('  ' + pad(user.username, nameW) + padLeft(user.count.toLocaleString(), countW));
-  }
-  return lines.join('\n');
-}
-
-function formatKeyFindings(data: ReportData): string {
-  const lines: string[] = [];
-  lines.push(sectionHeader('Key Findings'));
-  const findings: string[] = [];
-  if (data.tierStats.length > 0) {
-    const topTier = data.tierStats[0]!;
-    findings.push('Most common tier: ' + topTier.tier + ' (' + topTier.count.toLocaleString() + ' openings, ' + pct(topTier.percentage) + ')');
-  }
-  if (data.rarityStats.length > 0) {
-    const sorted = [...data.rarityStats].sort((a, b) => a.totalCount - b.totalCount);
-    const rarest = sorted[0]!;
-    findings.push('Rarest rarity: ' + rarest.rarity + ' (' + rarest.totalCount.toLocaleString() + ' items, ' + pct(rarest.totalPercentage) + ')');
-  }
-  if (data.valueAnalysis.topItems.length > 0) {
-    const byValue = [...data.valueAnalysis.topItems].sort((a, b) => b.itemValue - a.itemValue);
-    const highest = byValue[0]!;
-    findings.push('Highest value top item: ' + highest.itemName + ' (' + fmtDollars(highest.itemValue) + ', ' + highest.rarity + ')');
-  }
-  if (data.userActivity.topUsers.length > 0) {
-    const topUser = data.userActivity.topUsers[0]!;
-    findings.push('Most active user: ' + topUser.username + ' (' + topUser.count.toLocaleString() + ' openings)');
-  }
-  findings.push('Overall expected value per opening: ' + fmtDollars(data.valueAnalysis.overall.expectedValue));
-  for (let i = 0; i < findings.length; i++) {
-    lines.push('  ' + (i + 1) + '. ' + findings[i]);
+  lines.push('  ' + pad('Rarity', 18) + padLeft('Min', statW) + padLeft('Max', statW) + padLeft('Mean', statW) + padLeft('Median', statW));
+  lines.push('  ' + separator('─', 18 + statW * 4));
+  for (const [rarity, vs] of data.valueAnalysis.byRarity) {
+    lines.push('  ' + pad(rarity, 18) + padLeft(fmtDollars(vs.min), statW) + padLeft(fmtDollars(vs.max), statW) + padLeft(fmtDollars(vs.mean), statW) + padLeft(fmtDollars(vs.median), statW));
   }
   return lines.join('\n');
 }
@@ -246,7 +185,9 @@ function formatKeyFindings(data: ReportData): string {
 // ── CSV Report ──
 
 export function formatCSVReport(data: ReportData): string {
+  const tiers = data.tierStats.map(t => t.tier);
   const rows: string[] = [];
+
   rows.push('Section,Metric,Value');
   rows.push('Summary,Total Events,' + data.summary.totalEvents);
   rows.push('Summary,Date Range Start,' + data.summary.dateRange.start.toISOString());
@@ -261,13 +202,11 @@ export function formatCSVReport(data: ReportData): string {
   rows.push('');
 
   const rarityHeader = ['Rarity', 'Total Count', 'Total Percentage'];
-  for (const tier of ALL_TIERS) {
-    rarityHeader.push(tier + ' Count', tier + ' Percentage');
-  }
+  for (const tier of tiers) { rarityHeader.push(tier + ' Count', tier + ' Percentage'); }
   rows.push(rarityHeader.join(','));
   for (const rs of data.rarityStats) {
     const cells: (string | number)[] = [rs.rarity, rs.totalCount, rs.totalPercentage];
-    for (const tier of ALL_TIERS) {
+    for (const tier of tiers) {
       const tierData = rs.byTier.get(tier);
       cells.push(tierData?.count ?? 0, tierData?.percentage ?? 0);
     }
@@ -276,27 +215,20 @@ export function formatCSVReport(data: ReportData): string {
   rows.push('');
 
   rows.push('Tier,Min,Max,Mean,Median,StdDev');
-  for (const tier of ALL_TIERS) {
-    const vs = data.valueAnalysis.byTier.get(tier);
-    if (vs) { rows.push(tier + ',' + vs.min + ',' + vs.max + ',' + vs.mean + ',' + vs.median + ',' + vs.stdDev); }
+  for (const [tier, vs] of data.valueAnalysis.byTier) {
+    rows.push(tier + ',' + vs.min + ',' + vs.max + ',' + vs.mean + ',' + vs.median + ',' + vs.stdDev);
   }
   rows.push('');
 
   rows.push('Rarity,Min,Max,Mean,Median');
-  for (const rarity of ALL_RARITIES) {
-    const vs = data.valueAnalysis.byRarity.get(rarity);
-    if (vs) { rows.push(rarity + ',' + vs.min + ',' + vs.max + ',' + vs.mean + ',' + vs.median); }
+  for (const [rarity, vs] of data.valueAnalysis.byRarity) {
+    rows.push(rarity + ',' + vs.min + ',' + vs.max + ',' + vs.mean + ',' + vs.median);
   }
   rows.push('');
 
   rows.push('Metric,Value');
   rows.push('Overall Expected Value,' + data.valueAnalysis.overall.expectedValue);
-  rows.push('');
 
-  rows.push('Item Name,Count,Rarity,Value');
-  for (const item of data.valueAnalysis.topItems) {
-    rows.push(csvEscape(item.itemName) + ',' + item.count + ',' + item.rarity + ',' + item.itemValue);
-  }
   return rows.join('\n');
 }
 

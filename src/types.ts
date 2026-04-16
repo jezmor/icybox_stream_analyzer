@@ -1,8 +1,8 @@
 // ── Enumerations ──
 
-export type BoxTier = 'Bronze' | 'Silver' | 'Gold' | 'Icy';
+export type BoxTier = string;
 
-export type Rarity = 'quartz' | 'automatic' | 'chronograph' | 'tourbillon';
+export type Rarity = string;
 
 // ── Core Event Models ──
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { analyzeTiers } from './tier-analysis.js';
-import type { AccumulatedData, BoxTier, StoredEvent, Rarity } from '../types.js';
+import type { AccumulatedData, BoxTier, StoredEvent } from '../types.js';
 
 function makeEvent(overrides: Partial<StoredEvent> = {}): StoredEvent {
   return {
@@ -11,7 +11,7 @@ function makeEvent(overrides: Partial<StoredEvent> = {}): StoredEvent {
     boxSlug: 'bronze-box',
     itemName: 'Test Item',
     itemValue: 10,
-    rarity: 'quartz' as Rarity,
+    rarity: 'quartz',
     rarityColor: '#aaa',
     itemImageUrl: 'https://example.com/img.png',
     acquiredAt: new Date('2024-01-15T10:00:00Z'),
@@ -20,15 +20,15 @@ function makeEvent(overrides: Partial<StoredEvent> = {}): StoredEvent {
   };
 }
 
-function makeAccumulatedData(tierCounts: Partial<Record<BoxTier, number>>): AccumulatedData {
+function makeAccumulatedData(tierCounts: Record<string, number>): AccumulatedData {
   const byTier = new Map<BoxTier, StoredEvent[]>();
   const allEvents: StoredEvent[] = [];
   let total = 0;
 
-  for (const [tier, count] of Object.entries(tierCounts) as [BoxTier, number][]) {
+  for (const [tier, count] of Object.entries(tierCounts)) {
     const events: StoredEvent[] = [];
     for (let i = 0; i < count; i++) {
-      const event = makeEvent({ id: `${tier}-${i}`, boxName: `${tier} Box` });
+      const event = makeEvent({ id: tier + '-' + i, boxName: tier + ' Box' });
       events.push(event);
       allEvents.push(event);
     }
@@ -61,14 +61,6 @@ describe('analyzeTiers', () => {
     const silver = result.find((s) => s.tier === 'Silver')!;
     expect(silver.count).toBe(30);
     expect(silver.percentage).toBe(30);
-
-    const gold = result.find((s) => s.tier === 'Gold')!;
-    expect(gold.count).toBe(15);
-    expect(gold.percentage).toBe(15);
-
-    const icy = result.find((s) => s.tier === 'Icy')!;
-    expect(icy.count).toBe(5);
-    expect(icy.percentage).toBe(5);
   });
 
   it('sorts results by count in descending order', () => {
@@ -82,38 +74,27 @@ describe('analyzeTiers', () => {
   });
 
   it('rounds percentages to 2 decimal places', () => {
-    // 3 events total: 1 Bronze, 1 Silver, 1 Gold → each 33.33%
     const data = makeAccumulatedData({ Bronze: 1, Silver: 1, Gold: 1 });
     const result = analyzeTiers(data);
 
     const bronze = result.find((s) => s.tier === 'Bronze')!;
     expect(bronze.percentage).toBe(33.33);
-
-    const icy = result.find((s) => s.tier === 'Icy')!;
-    expect(icy.count).toBe(0);
-    expect(icy.percentage).toBe(0);
   });
 
-  it('includes tiers with zero events', () => {
+  it('only includes tiers present in data', () => {
     const data = makeAccumulatedData({ Gold: 10 });
     const result = analyzeTiers(data);
 
-    expect(result).toHaveLength(4);
-
-    const bronze = result.find((s) => s.tier === 'Bronze')!;
-    expect(bronze.count).toBe(0);
-    expect(bronze.percentage).toBe(0);
+    expect(result).toHaveLength(1);
+    expect(result[0].tier).toBe('Gold');
+    expect(result[0].count).toBe(10);
   });
 
   it('handles empty data with no events', () => {
     const data = makeAccumulatedData({});
     const result = analyzeTiers(data);
 
-    expect(result).toHaveLength(4);
-    for (const stat of result) {
-      expect(stat.count).toBe(0);
-      expect(stat.percentage).toBe(0);
-    }
+    expect(result).toHaveLength(0);
   });
 
   it('percentages sum to approximately 100 when all tiers have events', () => {
@@ -122,5 +103,14 @@ describe('analyzeTiers', () => {
 
     const totalPercentage = result.reduce((sum, s) => sum + s.percentage, 0);
     expect(totalPercentage).toBeCloseTo(100, 0);
+  });
+
+  it('handles new unknown tiers dynamically', () => {
+    const data = makeAccumulatedData({ Diamond: 5, Platinum: 3 });
+    const result = analyzeTiers(data);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].tier).toBe('Diamond');
+    expect(result[1].tier).toBe('Platinum');
   });
 });
