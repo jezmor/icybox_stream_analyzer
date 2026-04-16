@@ -1,0 +1,26 @@
+{
+  "name": "icybox-stream-analyzer",
+  "version": "1.0.0",
+  "description": "IcyBox Stream Analyzer - Collect and analyze IcyBox box-opening events",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "icybox": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "commander": "^14.0.3",
+    "eventsource-parser": "^3.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  }
+}

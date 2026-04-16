@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Data files
+*.jsonl
+*.csv
+
+# Python script
+jsonl_to_csv.py
+
+# Kiro
+.kiro/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Env
+.env
+.env.*
