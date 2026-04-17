@@ -2,22 +2,14 @@
 
 import { Command } from 'commander';
 import { createReadStream, existsSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 
-import type { CollectOptions, AnalyzeOptions, IcyBoxEvent, StoredEvent, ReportData } from './types.js';
+import type { CollectOptions, IcyBoxEvent, StoredEvent } from './types.js';
 import { validateEvent } from './collector/event-parser.js';
 import { Deduplicator } from './collector/deduplicator.js';
 import { DataWriter } from './collector/data-writer.js';
 import { SSEClient } from './collector/sse-client.js';
 import { PollingClient } from './collector/polling-client.js';
-import { DataReader } from './analyzer/data-reader.js';
-import { accumulate } from './analyzer/stats-engine.js';
-import { analyzeTiers } from './analyzer/tier-analysis.js';
-import { analyzeRarities } from './analyzer/rarity-analysis.js';
-import { analyzeValues } from './analyzer/value-analysis.js';
-import { analyzeUserActivity } from './analyzer/user-analysis.js';
-import { formatConsoleReport, formatCSVReport } from './analyzer/report-generator.js';
 
 // ── CLI Setup ──
 
@@ -25,8 +17,8 @@ const program = new Command();
 
 program
   .name('icybox')
-  .version('2.0.0')
-  .description('IcyBox Stream Analyzer — Collect and analyze IcyBox box-opening events');
+  .version('3.0.0')
+  .description('IcyBox Stream Collector — Collect box-opening events from the IcyBox activity stream');
 
 // ── collect subcommand ──
 
@@ -54,22 +46,6 @@ program
     }
 
     await runCollect(options);
-  });
-
-// ── analyze subcommand ──
-
-program
-  .command('analyze')
-  .description('Run statistical analysis on collected event data')
-  .option('--data-file <path>', 'Path to the JSONL data file', './icybox-data.jsonl')
-  .option('--export-csv <path>', 'Export analysis report as CSV to the given path')
-  .action(async (opts) => {
-    const options: AnalyzeOptions = {
-      dataFile: opts.dataFile,
-      exportCsv: opts.exportCsv,
-    };
-
-    await runAnalyze(options);
   });
 
 program.parse();
@@ -170,92 +146,6 @@ async function runCollect(options: CollectOptions): Promise<void> {
 
   process.on('SIGINT', () => void shutdown());
   process.on('SIGTERM', () => void shutdown());
-}
-
-// ── analyze implementation ──
-
-async function runAnalyze(options: AnalyzeOptions): Promise<void> {
-  // 1. Check that the data file exists
-  if (!existsSync(options.dataFile)) {
-    console.error(`[icybox] Data file not found: ${options.dataFile}`);
-    console.error('[icybox] Run "icybox collect" first to gather event data.');
-    process.exit(1);
-  }
-
-  console.log(`[icybox] Analyzing data from: ${options.dataFile}`);
-
-  // 2. Read all events via DataReader
-  const reader = new DataReader(options.dataFile);
-
-  // 3. Run the Stats Engine accumulator over all events
-  const data = await accumulate(reader.readAll());
-
-  if (data.totalCount === 0) {
-    console.error('[icybox] No events found in the data file.');
-    console.error('[icybox] Run "icybox collect" first to gather event data.');
-    process.exit(1);
-  }
-
-  console.log(`[icybox] Loaded ${data.totalCount} events`);
-
-  // 4. Run all four analysis modules
-  const tierStats = analyzeTiers(data);
-  const rarityStats = analyzeRarities(data);
-  const valueAnalysis = analyzeValues(data);
-  const userActivity = analyzeUserActivity(data);
-
-  // 5. Compute the duration string from the date range
-  const duration = formatDuration(data.dateRange.min, data.dateRange.max);
-
-  // 6. Build the ReportData object
-  const reportData: ReportData = {
-    summary: {
-      totalEvents: data.totalCount,
-      dateRange: { start: data.dateRange.min, end: data.dateRange.max },
-      duration,
-    },
-    tierStats,
-    rarityStats,
-    valueAnalysis,
-    userActivity,
-  };
-
-  // 7. Output the console report to stdout
-  const consoleReport = formatConsoleReport(reportData);
-  console.log(consoleReport);
-
-  // 8. If --export-csv is specified, write the CSV report
-  if (options.exportCsv) {
-    const csvReport = formatCSVReport(reportData);
-    await writeFile(options.exportCsv, csvReport, 'utf-8');
-    console.log(`[icybox] CSV report exported to: ${options.exportCsv}`);
-  }
-}
-
-/**
- * Formats the duration between two dates as a human-readable string.
- * Examples: "2 hours 15 minutes", "3 days 5 hours", "45 minutes"
- */
-function formatDuration(start: Date, end: Date): string {
-  const diffMs = Math.abs(end.getTime() - start.getTime());
-  const totalMinutes = Math.floor(diffMs / 60_000);
-  const totalHours = Math.floor(totalMinutes / 60);
-  const days = Math.floor(totalHours / 24);
-  const hours = totalHours % 24;
-  const minutes = totalMinutes % 60;
-
-  const parts: string[] = [];
-  if (days > 0) {
-    parts.push(`${days} ${days === 1 ? 'day' : 'days'}`);
-  }
-  if (hours > 0) {
-    parts.push(`${hours} ${hours === 1 ? 'hour' : 'hours'}`);
-  }
-  if (minutes > 0 || parts.length === 0) {
-    parts.push(`${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`);
-  }
-
-  return parts.join(' ');
 }
 
 // ── helpers ──
