@@ -88,12 +88,3 @@ Can be set up as a cron job for automated syncing (e.g. on a Raspberry Pi):
 crontab -e
 0 */12 * * * cd /path/to/icybox_stream && .venv/bin/python tools/sync_db.py --input ./icybox-data.jsonl --output /path/to/output >> sync.log 2>&1
 ```
-
-## jsonl_to_csv.py
-
-Simple converter from JSONL to CSV format.
-
-```bash
-python tools/jsonl_to_csv.py
-python tools/jsonl_to_csv.py input.jsonl output.csv
-```
