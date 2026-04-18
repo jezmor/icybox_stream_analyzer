@@ -1,13 +1,19 @@
--- Profit breakdown per box tier
+-- Profit breakdown per box tier (time-aware pricing)
 SELECT
   e.box_tier,
-  b.cost AS box_cost,
+  bp.cost AS box_cost,
   COUNT(*) AS opens,
-  COUNT(*) * b.cost AS total_in,
+  COUNT(*) * bp.cost AS total_in,
   SUM(e.item_value) AS total_out,
-  COUNT(*) * b.cost - SUM(e.item_value) AS profit,
-  ROUND(SUM(e.item_value) * 100.0 / (COUNT(*) * b.cost), 2) AS return_pct
+  COUNT(*) * bp.cost - SUM(e.item_value) AS profit,
+  ROUND(SUM(e.item_value) * 100.0 / (COUNT(*) * bp.cost), 2) AS return_pct
 FROM events e
-JOIN boxes b ON e.box_tier = b.box_tier
-GROUP BY e.box_tier
-ORDER BY opens DESC;
+JOIN box_pricing bp
+  ON bp.box_tier = e.box_tier
+  AND REPLACE(e.acquired_at, 'Z', '+00:00') >= COALESCE(
+    (SELECT MAX(bp2.effective_until) FROM box_pricing bp2
+     WHERE bp2.box_tier = bp.box_tier AND bp2.effective_from < bp.effective_from),
+    '1970-01-01T00:00:00+00:00')
+  AND (bp.effective_until IS NULL OR REPLACE(e.acquired_at, 'Z', '+00:00') < bp.effective_until)
+GROUP BY e.box_tier, bp.effective_from
+ORDER BY e.box_tier, bp.effective_from;

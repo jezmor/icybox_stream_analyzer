@@ -2,7 +2,8 @@
 """
 Build the unified IcyBox SQLite database from icybox-data.jsonl.
 
-Creates a single icybox.db with tables: boxes, rarities, watches, events.
+Creates icybox.db with tables: boxes, rarities, watches, events.
+Boxes and rarities are discovered from events — no hardcoded lists.
 Downloads watch images locally. Re-runnable — adds new data on each run.
 
 Usage:
@@ -23,26 +24,18 @@ import urllib.error
 from pathlib import Path
 
 
-# ── Known data ──
-
-KNOWN_BOXES = {
-    'Bronze': {'box_name': 'Bronze Box', 'box_slug': 'bronze-box', 'cost': 50},
-    'Silver': {'box_name': 'Silver Box', 'box_slug': 'silver-box', 'cost': 100},
-    'Gold':   {'box_name': 'Gold Box',   'box_slug': 'gold-box',   'cost': 500},
-    'Icy':    {'box_name': 'Ice Box',    'box_slug': 'ice-box',    'cost': 1000},
-}
-
-KNOWN_RARITIES = {
-    'quartz':            {'full_name': 'Quartz',            'short_name': 'Quartz'},
-    'automatic':         {'full_name': 'Automatic',         'short_name': 'Auto'},
-    'chronograph':       {'full_name': 'Chronograph',       'short_name': 'Chrono'},
-    'tourbillon':        {'full_name': 'Tourbillon',        'short_name': 'Tourbillon'},
-    'grand':             {'full_name': 'Grand Tourbillon',  'short_name': 'Grand'},
-    'grail':             {'full_name': 'Grail',             'short_name': 'Grail'},
-}
-
-
 # ── Helpers ──
+
+# Rarity aliases: API sends short names, website uses full names
+RARITY_ALIASES = {
+    'grand': 'grand_tourbillon',
+}
+
+
+def normalize_rarity(rarity: str) -> str:
+    """Normalize rarity key using known aliases."""
+    return RARITY_ALIASES.get(rarity, rarity)
+
 
 def slugify(text: str) -> str:
     text = text.lower().strip()
@@ -106,7 +99,9 @@ def init_db(db_path: str) -> sqlite3.Connection:
             box_tier TEXT PRIMARY KEY,
             box_name TEXT NOT NULL,
             box_slug TEXT DEFAULT '',
-            cost REAL
+            price REAL,
+            deprecated_at TEXT,
+            first_seen_at TEXT
         )
     """)
 
@@ -134,11 +129,11 @@ def init_db(db_path: str) -> sqlite3.Connection:
             username TEXT NOT NULL,
             platform TEXT DEFAULT '',
             box_name TEXT NOT NULL,
-            box_tier TEXT NOT NULL REFERENCES boxes(box_tier),
+            box_tier TEXT NOT NULL,
             box_slug TEXT DEFAULT '',
-            item_name TEXT NOT NULL REFERENCES watches(item_name),
+            item_name TEXT NOT NULL,
             item_value REAL NOT NULL,
-            rarity TEXT NOT NULL REFERENCES rarities(rarity_key),
+            rarity TEXT NOT NULL,
             rarity_color TEXT DEFAULT '',
             item_image_url TEXT DEFAULT '',
             acquired_at TEXT NOT NULL,
@@ -152,34 +147,22 @@ def init_db(db_path: str) -> sqlite3.Connection:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_events_item_name ON events(item_name)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_events_acquired_at ON events(acquired_at)")
 
-    # Seed known boxes
-    for tier, info in KNOWN_BOXES.items():
-        conn.execute(
-            "INSERT OR IGNORE INTO boxes (box_tier, box_name, box_slug, cost) VALUES (?, ?, ?, ?)",
-            (tier, info['box_name'], info['box_slug'], info['cost'])
-        )
-
-    # Seed known rarities
-    for key, info in KNOWN_RARITIES.items():
-        conn.execute(
-            "INSERT OR IGNORE INTO rarities (rarity_key, full_name, short_name) VALUES (?, ?, ?)",
-            (key, info['full_name'], info['short_name'])
-        )
-
     conn.commit()
     return conn
 
 
-def ensure_box(conn: sqlite3.Connection, box_tier: str, box_name: str, box_slug: str):
+def ensure_box(conn: sqlite3.Connection, box_tier: str, box_name: str, box_slug: str, acquired_at: str):
+    """Add box if not already in the db. Discovered from events."""
     row = conn.execute("SELECT 1 FROM boxes WHERE box_tier = ?", (box_tier,)).fetchone()
     if not row:
         conn.execute(
-            "INSERT INTO boxes (box_tier, box_name, box_slug, cost) VALUES (?, ?, ?, NULL)",
-            (box_tier, box_name, box_slug)
+            "INSERT INTO boxes (box_tier, box_name, box_slug, price, deprecated_at, first_seen_at) VALUES (?, ?, ?, NULL, NULL, ?)",
+            (box_tier, box_name, box_slug, acquired_at)
         )
 
 
 def ensure_rarity(conn: sqlite3.Connection, rarity_key: str):
+    """Add rarity if not already in the db. Discovered from events."""
     row = conn.execute("SELECT 1 FROM rarities WHERE rarity_key = ?", (rarity_key,)).fetchone()
     if not row:
         full_name = rarity_key.replace('_', ' ').title()
@@ -215,7 +198,7 @@ def process(input_path: str, conn: sqlite3.Connection, images_dir: str):
             if not item_name or not event_id:
                 continue
 
-            rarity = e.get('rarity', '')
+            rarity = normalize_rarity(e.get('rarity', ''))
             box_name = e.get('boxName', '')
             box_tier = extract_tier(box_name)
             box_slug = e.get('boxSlug', '')
@@ -225,11 +208,11 @@ def process(input_path: str, conn: sqlite3.Connection, images_dir: str):
             acquired_at = e.get('acquiredAt', '')
             collected_at = e.get('collectedAt', '')
 
-            # Ensure box and rarity exist
-            ensure_box(conn, box_tier, box_name, box_slug)
+            # Discover boxes and rarities from events
+            ensure_box(conn, box_tier, box_name, box_slug, acquired_at)
             ensure_rarity(conn, rarity)
 
-            # ── Watches table (flat catalog, one row per unique watch) ──
+            # ── Watches table ──
             watch_exists = conn.execute(
                 'SELECT 1 FROM watches WHERE item_name = ?', (item_name,)
             ).fetchone()
@@ -276,12 +259,14 @@ def process(input_path: str, conn: sqlite3.Connection, images_dir: str):
 
     watch_total = conn.execute('SELECT COUNT(*) FROM watches').fetchone()[0]
     event_total = conn.execute('SELECT COUNT(*) FROM events').fetchone()[0]
+    box_total = conn.execute('SELECT COUNT(*) FROM boxes').fetchone()[0]
+    rarity_total = conn.execute('SELECT COUNT(*) FROM rarities').fetchone()[0]
 
     print(f'\nProcessed {total} lines from {input_path}')
-    print(f'  Events:  {new_events} new, {skipped_events} skipped (dupes)')
-    print(f'  Watches: {new_watches} new')
-    print(f'  Images:  {images_downloaded} downloaded')
-    print(f'  Totals:  {event_total} events, {watch_total} unique watches in DB')
+    print(f'  Events:   {new_events} new, {skipped_events} skipped (dupes)')
+    print(f'  Watches:  {new_watches} new')
+    print(f'  Images:   {images_downloaded} downloaded')
+    print(f'  Totals:   {event_total} events, {watch_total} watches, {box_total} boxes, {rarity_total} rarities')
 
 
 def main():
