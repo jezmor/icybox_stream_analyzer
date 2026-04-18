@@ -38,6 +38,86 @@ python tools/build_db.py --input ./icybox-data.jsonl --output ./watch-catalog
 
 ### Database schema
 
+```mermaid
+erDiagram
+    boxes {
+        TEXT box_tier PK
+        TEXT box_name
+        TEXT box_slug
+        REAL price
+        TEXT deprecated_at
+        TEXT first_seen_at
+    }
+
+    rarities {
+        TEXT rarity_key PK
+        TEXT full_name
+        TEXT short_name
+    }
+
+    watches {
+        TEXT item_name PK
+        REAL item_value
+        TEXT rarity_color
+        TEXT image_url
+        TEXT image_path
+    }
+
+    events {
+        TEXT id PK
+        TEXT username
+        TEXT platform
+        TEXT box_name
+        TEXT box_tier FK
+        TEXT box_slug
+        TEXT item_name FK
+        REAL item_value
+        TEXT rarity FK
+        TEXT rarity_color
+        TEXT item_image_url
+        TEXT acquired_at
+        TEXT collected_at
+    }
+
+    box_pricing {
+        TEXT box_tier FK
+        REAL cost
+        TEXT effective_from PK
+        TEXT effective_until
+    }
+
+    stated_odds {
+        TEXT box_tier FK
+        TEXT rarity_key FK
+        TEXT rarity_label
+        REAL odds_pct
+        REAL min_value
+        REAL max_value
+        TEXT effective_from PK
+        TEXT effective_until
+    }
+
+    listed_watches {
+        TEXT item_name PK
+        TEXT box_tier PK
+        REAL item_value
+        TEXT image_url
+        TEXT image_path
+        INT listed
+        TEXT first_scraped_at
+        TEXT last_scraped_at
+        TEXT delisted_at
+    }
+
+    boxes ||--o{ events : "box_tier"
+    boxes ||--o{ box_pricing : "box_tier"
+    boxes ||--o{ stated_odds : "box_tier"
+    boxes ||--o{ listed_watches : "box_tier"
+    rarities ||--o{ events : "rarity"
+    rarities ||--o{ stated_odds : "rarity_key"
+    watches ||--o{ events : "item_name"
+```
+
 - **boxes** — box tiers with names, slugs, current price, `deprecated_at`, `first_seen_at` (discovered from events)
 - **rarities** — rarity keys with full and short names (discovered from events + website)
 - **watches** — one row per unique watch (name, value, image path)
