@@ -8,7 +8,7 @@ SELECT
   SUM(CASE WHEN e.box_tier = 'Icy' THEN 1 ELSE 0 END) AS icy,
   SUM(bp.cost) AS total_spent,
   SUM(e.item_value) AS total_received,
-  SUM(bp.cost) - SUM(e.item_value) AS net_loss
+  SUM(e.item_value) - SUM(bp.cost) AS net_gain
 FROM events e
 JOIN box_pricing bp
   ON bp.box_tier = e.box_tier

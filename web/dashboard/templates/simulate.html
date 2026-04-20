@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}Box Simulator — IcyBox{% endblock %}
+{% block content %}
+<div class="header">
+  <h1>Box Simulator</h1>
+  <div class="stats">Open boxes and build your simulated collection</div>
+</div>
+
+<div class="sim-controls">
+  <select id="tierSelect">
+    {% for t in tiers %}
+    <option value="{{ t }}">{{ t }} Box</option>
+    {% endfor %}
+  </select>
+  <button class="btn-open" id="openBtn" onclick="openBox()">Open Box</button>
+</div>
+
+<div class="sim-result hidden" id="simResult">
+  <div class="sim-result-image" id="resultImage"></div>
+  <div class="sim-result-details">
+    <div class="sim-result-name" id="resultName"></div>
+    <div class="sim-result-badges">
+      <span class="badge" id="resultRarity"></span>
+      <span class="sim-result-tier" id="resultTier"></span>
+    </div>
+    <div class="sim-result-value" id="resultValue"></div>
+    <div class="sim-result-cost" id="resultCost"></div>
+    <div class="sim-result-net" id="resultNet"></div>
+  </div>
+</div>
+
+<div class="sim-stats" id="simStats">
+  <div class="sim-stat">
+    <span class="sim-stat-label">Total Opens</span>
+    <span class="sim-stat-value" id="statOpens">{{ stats.total_opens }}</span>
+  </div>
+  <div class="sim-stat">
+    <span class="sim-stat-label">Total Spent</span>
+    <span class="sim-stat-value" id="statSpent">{{ stats.total_spent | format_money }}</span>
+  </div>
+  <div class="sim-stat">
+    <span class="sim-stat-label">Total Value</span>
+    <span class="sim-stat-value sim-stat-green" id="statValue">{{ stats.total_value | format_money }}</span>
+  </div>
+  <div class="sim-stat">
+    <span class="sim-stat-label">Net Gain/Loss</span>
+    <span class="sim-stat-value {% if stats.net_gain_loss >= 0 %}sim-stat-green{% else %}sim-stat-red{% endif %}" id="statNet">{{ stats.net_gain_loss | format_money }}</span>
+  </div>
+</div>
+
+<div class="sim-collection-header">
+  <h2>Your Collection <span id="collectionCount">({{ collection | length }})</span></h2>
+</div>
+
+{% if collection %}
+<div class="sim-collection" id="simCollection">
+  {% for w in collection %}
+  <div class="sim-card" data-id="{{ w.id }}">
+    <div class="sim-card-image">
+      {% if w.image_path %}
+      <img src="/images/{{ w.image_path }}" alt="{{ w.item_name }}">
+      {% else %}
+      <div class="no-image">?</div>
+      {% endif %}
+    </div>
+    <div class="sim-card-body">
+      <div class="sim-card-name"><a href="/watch/{{ w.item_name | slugify }}">{{ w.item_name }}</a></div>
+      <div class="sim-card-badges">
+        <span class="badge" style="background:{{ rarity_color(w.rarity) }}">{{ w.rarity | replace('_', ' ') | title }}</span>
+        <span class="sim-card-tier">{{ w.box_tier }}</span>
+      </div>
+      <div class="sim-card-value">{{ w.item_value | format_money }}</div>
+      <div class="sim-card-cost">Box cost: {{ w.box_cost | format_money }}</div>
+      <button class="btn-discard" onclick="discardWatch({{ w.id }}, this)">Discard</button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="sim-collection" id="simCollection">
+  <div class="empty-state" id="emptyState">No watches yet. Open a box to get started!</div>
+</div>
+{% endif %}
+
+<div class="sim-reset-area">
+  <button class="btn-reset" onclick="resetAll()">Reset All</button>
+</div>
+
+<script>
+const RARITY_COLORS = {
+  quartz: '#9ca3af',
+  automatic: '#22c55e',
+  chronograph: '#3b82f6',
+  tourbillon: '#a855f7',
+  grand_tourbillon: '#ef4444',
+  grail: '#eab308'
+};
+
+function formatMoney(v) {
+  return '$' + Number(v).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function rarityLabel(key) {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function slugify(text) {
+  return text.toLowerCase().trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function updateStats(stats) {
+  document.getElementById('statOpens').textContent = stats.total_opens;
+  document.getElementById('statSpent').textContent = formatMoney(stats.total_spent);
+  document.getElementById('statValue').textContent = formatMoney(stats.total_value);
+
+  const netEl = document.getElementById('statNet');
+  netEl.textContent = formatMoney(stats.net_gain_loss);
+  netEl.className = 'sim-stat-value ' + (stats.net_gain_loss >= 0 ? 'sim-stat-green' : 'sim-stat-red');
+}
+
+async function openBox() {
+  const tier = document.getElementById('tierSelect').value;
+  const btn = document.getElementById('openBtn');
+  btn.disabled = true;
+  btn.textContent = 'Opening...';
+
+  try {
+    const resp = await fetch('/api/simulate/open', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tier})
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      alert(data.error || 'Failed to open box');
+      return;
+    }
+
+    // Show result
+    const resultEl = document.getElementById('simResult');
+    resultEl.classList.remove('hidden');
+    resultEl.style.animation = 'none';
+    resultEl.offsetHeight; // trigger reflow
+    resultEl.style.animation = 'fadeIn 0.4s ease';
+
+    const imgEl = document.getElementById('resultImage');
+    if (data.image_path) {
+      imgEl.innerHTML = '<img src="/images/' + data.image_path + '" alt="' + data.item_name + '">';
+    } else {
+      imgEl.innerHTML = '<div class="no-image">?</div>';
+    }
+
+    document.getElementById('resultName').innerHTML = '<a href="/watch/' + slugify(data.item_name) + '">' + data.item_name + '</a>';
+
+    const rarityBadge = document.getElementById('resultRarity');
+    rarityBadge.textContent = rarityLabel(data.rarity);
+    rarityBadge.style.background = RARITY_COLORS[data.rarity] || '#6b7280';
+
+    document.getElementById('resultTier').textContent = data.tier + ' Box';
+    document.getElementById('resultValue').textContent = 'Value: ' + formatMoney(data.item_value);
+    document.getElementById('resultCost').textContent = 'Box Cost: ' + formatMoney(data.box_cost);
+
+    const net = data.item_value - data.box_cost;
+    const netEl = document.getElementById('resultNet');
+    netEl.textContent = 'Net: ' + formatMoney(net);
+    netEl.className = 'sim-result-net ' + (net >= 0 ? 'sim-stat-green' : 'sim-stat-red');
+
+    // Update stats
+    updateStats(data.stats);
+
+    // Add card to collection
+    addCardToCollection(data);
+
+  } catch (e) {
+    alert('Error opening box');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Open Box';
+  }
+}
+
+function addCardToCollection(data) {
+  const collection = document.getElementById('simCollection');
+  // Remove empty state if present
+  const empty = document.getElementById('emptyState');
+  if (empty) empty.remove();
+
+  const card = document.createElement('div');
+  card.className = 'sim-card';
+  card.dataset.id = data.id;
+  card.style.animation = 'fadeIn 0.3s ease';
+
+  const imgHtml = data.image_path
+    ? '<img src="/images/' + data.image_path + '" alt="' + data.item_name + '">'
+    : '<div class="no-image">?</div>';
+
+  card.innerHTML =
+    '<div class="sim-card-image">' + imgHtml + '</div>' +
+    '<div class="sim-card-body">' +
+      '<div class="sim-card-name"><a href="/watch/' + slugify(data.item_name) + '">' + data.item_name + '</a></div>' +
+      '<div class="sim-card-badges">' +
+        '<span class="badge" style="background:' + (RARITY_COLORS[data.rarity] || '#6b7280') + '">' + rarityLabel(data.rarity) + '</span>' +
+        '<span class="sim-card-tier">' + data.tier + '</span>' +
+      '</div>' +
+      '<div class="sim-card-value">' + formatMoney(data.item_value) + '</div>' +
+      '<div class="sim-card-cost">Box cost: ' + formatMoney(data.box_cost) + '</div>' +
+      '<button class="btn-discard" onclick="discardWatch(' + data.id + ', this)">Discard</button>' +
+    '</div>';
+
+  collection.insertBefore(card, collection.firstChild);
+  updateCollectionCount(1);
+}
+
+function updateCollectionCount(delta) {
+  const el = document.getElementById('collectionCount');
+  const current = parseInt(el.textContent.replace(/[()]/g, '')) || 0;
+  el.textContent = '(' + (current + delta) + ')';
+}
+
+async function discardWatch(id, btn) {
+  btn.disabled = true;
+
+  try {
+    const resp = await fetch('/api/simulate/discard', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id})
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      alert(data.error || 'Failed to discard');
+      return;
+    }
+
+    // Remove card
+    const card = btn.closest('.sim-card');
+    card.remove();
+    updateStats(data.stats);
+    updateCollectionCount(-1);
+
+    // Show empty state if no cards left
+    const collection = document.getElementById('simCollection');
+    if (!collection.querySelector('.sim-card')) {
+      collection.innerHTML = '<div class="empty-state" id="emptyState">No watches yet. Open a box to get started!</div>';
+      document.getElementById('collectionCount').textContent = '(0)';
+    }
+  } catch (e) {
+    alert('Error discarding watch');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function resetAll() {
+  if (!confirm('Reset all simulation data? This cannot be undone.')) return;
+
+  try {
+    const resp = await fetch('/api/simulate/reset', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'}
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      alert('Failed to reset');
+      return;
+    }
+
+    updateStats(data.stats);
+    document.getElementById('simResult').classList.add('hidden');
+    const collection = document.getElementById('simCollection');
+    collection.innerHTML = '<div class="empty-state" id="emptyState">No watches yet. Open a box to get started!</div>';
+    document.getElementById('collectionCount').textContent = '(0)';
+  } catch (e) {
+    alert('Error resetting');
+  }
+}
+</script>
+{% endblock %}

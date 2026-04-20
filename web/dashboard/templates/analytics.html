@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — IcyBox Analytics{% endblock %}
+{% block content %}
+<div class="header">
+  <h1>{{ title }}</h1>
+  <div class="stats">{{ description }}</div>
+</div>
+
+{% if rows %}
+<div class="analytics-table-wrapper">
+  {% if 'username' in columns %}
+  <div class="filters" style="border-bottom:none;padding-bottom:0">
+    <label>Search:</label>
+    <input type="text" id="analyticsSearch" placeholder="Username..." oninput="filterTable()">
+  </div>
+  {% endif %}
+  <table class="data-table analytics-table" id="analyticsTable">
+    <thead>
+      <tr>
+        {% for col in columns %}
+        <th>{{ col | replace('_', ' ') | title }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        {% for i in range(columns | length) %}
+        {% set col = columns[i] %}
+        {% set val = row[i] %}
+        {% if val is none %}
+        <td></td>
+        {% elif is_money_column(col) %}
+        <td class="money{% if val is number and val < 0 %} negative{% endif %}">{{ val | format_money }}</td>
+        {% elif is_pct_column(col) %}
+        <td class="pct">{{ val | format_pct }}</td>
+        {% else %}
+        <td>{{ val }}</td>
+        {% endif %}
+      {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if 'username' in columns %}
+<script>
+function filterTable() {
+  const q = document.getElementById('analyticsSearch').value.toLowerCase();
+  const rows = document.querySelectorAll('#analyticsTable tbody tr');
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = !q || text.includes(q) ? '' : 'none';
+  });
+}
+</script>
+{% endif %}
+
+{% if query_name == 'profit-by-tier' %}
+<script>
+(function() {
+  const table = document.getElementById('analyticsTable');
+  const rows = table.querySelectorAll('tbody tr');
+  const cols = {{ columns | tojson }};
+  const moneyKeys = ['box_cost', 'total_in', 'total_out', 'net_gain'];
+  const numKeys = ['opens'];
+
+  const totals = {};
+  cols.forEach(c => { totals[c] = 0; });
+
+  let totalIn = 0, totalOut = 0;
+
+  rows.forEach(row => {
+    const cells = row.querySelectorAll('td');
+    cols.forEach((col, i) => {
+      const text = cells[i].textContent.replace(/[$,%]/g, '').replace(/,/g, '').trim();
+      const num = parseFloat(text);
+      if (!isNaN(num) && (moneyKeys.includes(col) || numKeys.includes(col))) {
+        totals[col] += num;
+      }
+      if (col === 'total_in') totalIn += isNaN(num) ? 0 : num;
+      if (col === 'total_out') totalOut += isNaN(num) ? 0 : num;
+    });
+  });
+
+  // Compute return_pct from totals
+  if (totalIn > 0) {
+    totals['return_pct'] = (totalOut * 100.0 / totalIn);
+  }
+
+  function fmt(v) {
+    return '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+
+  const tfoot = document.createElement('tfoot');
+  const tr = document.createElement('tr');
+  tr.style.fontWeight = '700';
+  tr.style.borderTop = '2px solid #444';
+
+  cols.forEach(col => {
+    const td = document.createElement('td');
+    if (col === cols[0]) {
+      td.textContent = 'TOTAL';
+    } else if (moneyKeys.includes(col)) {
+      td.textContent = fmt(totals[col]);
+      td.className = 'money' + (totals[col] < 0 ? ' negative' : '');
+    } else if (col === 'return_pct') {
+      td.textContent = totals[col].toFixed(2) + '%';
+      td.className = 'pct';
+    } else if (numKeys.includes(col)) {
+      td.textContent = totals[col].toLocaleString();
+    } else {
+      td.textContent = '';
+    }
+    tr.appendChild(td);
+  });
+
+  tfoot.appendChild(tr);
+  table.appendChild(tfoot);
+})();
+</script>
+{% endif %}
+{% else %}
+<div class="empty-state">
+  <p>No data available</p>
+</div>
+{% endif %}
+{% endblock %}

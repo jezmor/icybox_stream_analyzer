@@ -23,11 +23,15 @@ FROM (
     s.box_tier,
     s.rarity_key,
     s.odds_pct AS stated_pct,
+    s.min_value,
     s.effective_from,
     s.effective_until,
+    COALESCE(bp.cost, 0) AS box_cost,
     COUNT(e.id) AS drops,
     SUM(COUNT(e.id)) OVER (PARTITION BY s.box_tier, s.effective_from) AS tier_total
   FROM stated_odds s
+  LEFT JOIN box_pricing bp
+    ON bp.box_tier = s.box_tier AND bp.effective_until IS NULL
   LEFT JOIN events e
     ON e.box_tier = s.box_tier
     AND e.rarity = s.rarity_key
@@ -41,4 +45,4 @@ FROM (
     )
   GROUP BY s.box_tier, s.rarity_key, s.effective_from
 )
-ORDER BY box_tier, effective_from, stated_pct DESC;
+ORDER BY box_cost ASC, box_tier, effective_from, min_value ASC;

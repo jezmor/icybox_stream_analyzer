@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}IcyBox Watch Catalog{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav class="navbar">
+  <div class="nav-brand"><a href="/">IcyBox Watch Catalog</a></div>
+  <div class="nav-links">
+    <a href="/" class="nav-link{% if request.path == '/' %} active{% endif %}">Catalog</a>
+    {% for t in tiers %}
+    <a href="/box/{{ t }}" class="nav-link{% if request.path == '/box/' + t %} active{% endif %}">{{ t }}</a>
+    {% endfor %}
+    <div class="nav-dropdown">
+      <span class="nav-link nav-dropdown-toggle{% if request.path.startswith('/analytics') %} active{% endif %}">Analytics ▾</span>
+      <div class="nav-dropdown-menu">
+        {% for key, q in analytics_queries.items() %}
+        <a href="/analytics/{{ key }}" class="nav-dropdown-item{% if request.path == '/analytics/' + key %} active{% endif %}">{{ q.title }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    <a href="/simulate" class="nav-link{% if request.path == '/simulate' %} active{% endif %}">Simulate</a>
+  </div>
+</nav>
+<main class="content">
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

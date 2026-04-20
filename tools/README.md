@@ -109,6 +109,26 @@ erDiagram
         TEXT delisted_at
     }
 
+    user_watch_data {
+        TEXT item_name PK
+        REAL msrp
+        REAL market_value
+        TEXT notes
+        TEXT reference_number
+        TEXT market_value_source
+        TEXT manufacturer_url
+    }
+
+    user_simulation {
+        INT id PK
+        TEXT box_tier FK
+        TEXT item_name
+        REAL item_value
+        TEXT rarity
+        REAL box_cost
+        TEXT opened_at
+    }
+
     boxes ||--o{ events : "box_tier"
     boxes ||--o{ box_pricing : "box_tier"
     boxes ||--o{ stated_odds : "box_tier"
@@ -116,6 +136,7 @@ erDiagram
     rarities ||--o{ events : "rarity"
     rarities ||--o{ stated_odds : "rarity_key"
     watches ||--o{ events : "item_name"
+    watches ||--o| user_watch_data : "item_name"
 ```
 
 - **boxes** — box tiers with names, slugs, current price, `deprecated_at`, `first_seen_at` (discovered from events)
@@ -125,6 +146,8 @@ erDiagram
 - **box_pricing** — versioned box prices with `effective_from` / `effective_until` dates
 - **stated_odds** — advertised odds from the website, versioned with effective dates
 - **listed_watches** — grail watches from box pages, with `delisted_at` tracking
+- **user_watch_data** — dashboard-managed: MSRP, market value, notes, reference number, manufacturer URL per watch
+- **user_simulation** — dashboard-managed: simulated box opens for the simulator
 
 ### Rebuild from scratch
 
@@ -168,3 +191,15 @@ Can be set up as a cron job for automated syncing (e.g. on a Raspberry Pi):
 crontab -e
 0 */12 * * * cd /path/to/icybox_stream && .venv/bin/python tools/sync_db.py --input ./icybox-data.jsonl --output /path/to/output >> sync.log 2>&1
 ```
+
+## build_site.py
+
+Generates a static HTML watch catalog from `icybox.db`. This is the legacy static site — the [Flask dashboard](../web/README.md) is the primary UI now.
+
+```bash
+python tools/build_site.py --db '/Volumes/Crucial X9/projects/icybox_stream/icybox.db' --images '/Volumes/Crucial X9/projects/icybox_stream/images'
+```
+
+Then open `web/site/index.html` in your browser.
+
+**Note:** Safari blocks `file://` image loading from local HTML files by default. To fix: Safari → Settings → Advanced → check "Show Develop menu", then Develop → "Disable Local File Restrictions". Chrome and Firefox work without changes.

@@ -24,6 +24,10 @@ Thumbs.db
 # Python
 .venv/
 __pycache__/
+.pytest_cach/
+
+# Generated site
+site/
 
 # Env
 .env

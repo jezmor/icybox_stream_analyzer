@@ -3,7 +3,7 @@ SELECT
   COUNT(*) AS opens,
   SUM(bp.cost) AS total_in,
   SUM(e.item_value) AS total_out,
-  SUM(bp.cost) - SUM(e.item_value) AS profit,
+  SUM(bp.cost) - SUM(e.item_value) AS net_gain,
   ROUND(SUM(e.item_value) * 100.0 / SUM(bp.cost), 2) AS return_pct
 FROM events e
 JOIN box_pricing bp

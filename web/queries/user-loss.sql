@@ -19,4 +19,4 @@ JOIN box_pricing bp
     '1970-01-01T00:00:00+00:00')
   AND (bp.effective_until IS NULL OR REPLACE(e.acquired_at, 'Z', '+00:00') < bp.effective_until)
 -- WHERE e.username = 'username'
-ORDER BY e.username, e.acquired_at;
+ORDER BY e.acquired_at, e.username;

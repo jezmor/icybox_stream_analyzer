@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}{{ watch.name }} — IcyBox{% endblock %}
+{% block content %}
+<div class="watch-detail">
+  <div class="watch-detail-header">
+    <div class="watch-detail-image">
+      {% if watch.image_path %}
+      <img src="/images/{{ watch.image_path }}" alt="{{ watch.name }}">
+      {% else %}
+      <div class="no-image">No Image</div>
+      {% endif %}
+    </div>
+    <div class="watch-detail-info">
+      <h1>{{ watch.name }}</h1>
+      <div class="watch-detail-value">{{ watch.value | format_money }}</div>
+
+      {% if watch.msrp is not none %}
+      <div class="watch-detail-price" id="msrp-display">MSRP: <span id="msrp-value">{{ watch.msrp | format_money }}</span></div>
+      {% else %}
+      <div class="watch-detail-price" id="msrp-display" style="display:none">MSRP: <span id="msrp-value"></span></div>
+      {% endif %}
+
+      {% if watch.market_value is not none %}
+      <div class="watch-detail-price" id="mv-display">Market Value: <span id="mv-value">{{ watch.market_value | format_money }}</span>{% if watch.market_value_source %} <span class="mv-source" id="mv-source-display">({{ watch.market_value_source }})</span>{% else %}<span class="mv-source" id="mv-source-display"></span>{% endif %}</div>
+      {% else %}
+      <div class="watch-detail-price" id="mv-display" style="display:none">Market Value: <span id="mv-value"></span> <span class="mv-source" id="mv-source-display"></span></div>
+      {% endif %}
+
+      {% if watch.reference_number %}
+      <div class="watch-detail-price" id="ref-display">Ref: <span id="ref-value">{{ watch.reference_number }}</span></div>
+      {% else %}
+      <div class="watch-detail-price" id="ref-display" style="display:none">Ref: <span id="ref-value"></span></div>
+      {% endif %}
+
+      {% if watch.manufacturer_url %}
+      <div class="watch-detail-price" id="mfg-url-display"><a href="{{ watch.manufacturer_url }}" target="_blank" rel="noopener" class="mfg-link" id="mfg-url-link">🔗 Manufacturer Page</a></div>
+      {% else %}
+      <div class="watch-detail-price" id="mfg-url-display" style="display:none"><a href="" target="_blank" rel="noopener" class="mfg-link" id="mfg-url-link">🔗 Manufacturer Page</a></div>
+      {% endif %}
+
+      {% if watch.is_listed_only %}
+      <div class="listed-only-indicator">Listed but not yet observed</div>
+      {% endif %}
+
+      <div class="watch-detail-stats">
+        <div class="stat">Total Drops: <strong>{{ watch.total_drops }}</strong></div>
+        {% if watch.first_seen %}
+        <div class="stat">First Seen: <strong>{{ watch.first_seen }}</strong></div>
+        {% endif %}
+        {% if watch.last_seen %}
+        <div class="stat">Last Seen: <strong>{{ watch.last_seen }}</strong></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if watch.tiers %}
+  <div class="watch-detail-section">
+    <h2>Drop Statistics by Tier</h2>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Tier</th>
+          <th>Rarity</th>
+          <th>Drop Count</th>
+          <th>Drop Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in watch.tiers %}
+        <tr>
+          <td>{{ t.tier }}</td>
+          <td><span class="badge" style="background:{{ rarity_color(t.rarity) }}">{{ t.rarity | replace('_', ' ') | title }}</span></td>
+          <td>{{ t.drop_count }}</td>
+          <td>{{ t.drop_rate | format_pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="watch-detail-section">
+    <h2>User Data</h2>
+
+    <div class="inline-edit-group">
+      <label>MSRP:</label>
+      <div class="inline-edit">
+        <span class="input-group"><span class="input-prefix">$</span><input type="text" id="edit-msrp" value="{{ watch.msrp if watch.msrp is not none else '' }}" placeholder="Enter MSRP"></span>
+        <span class="edit-error" id="error-msrp"></span>
+      </div>
+    </div>
+
+    <div class="inline-edit-group">
+      <label>Market Value:</label>
+      <div class="inline-edit">
+        <span class="input-group"><span class="input-prefix">$</span><input type="text" id="edit-market-value" value="{{ watch.market_value if watch.market_value is not none else '' }}" placeholder="Enter Market Value"></span>
+        <select id="edit-mv-source">
+          <option value="">Source...</option>
+          {% for src in ["eBay", "Chrono24", "StockX", "Amazon", "Jomashop", "Other"] %}
+          <option value="{{ src }}"{% if watch.market_value_source == src %} selected{% endif %}>{{ src }}</option>
+          {% endfor %}
+        </select>
+        <span class="edit-error" id="error-market-value"></span>
+      </div>
+    </div>
+
+    <div class="inline-edit-group">
+      <label>Reference #:</label>
+      <div class="inline-edit">
+        <input type="text" id="edit-reference-number" value="{{ watch.reference_number if watch.reference_number else '' }}" placeholder="Enter reference number">
+        <span class="edit-error" id="error-reference-number"></span>
+      </div>
+    </div>
+
+    <div class="inline-edit-group">
+      <label>Manufacturer URL:</label>
+      <div class="inline-edit">
+        <input type="text" id="edit-manufacturer-url" value="{{ watch.manufacturer_url if watch.manufacturer_url else '' }}" placeholder="https://...">
+        <span class="edit-error" id="error-manufacturer-url"></span>
+      </div>
+    </div>
+
+    <div class="inline-edit-group">
+      <label>Notes:</label>
+      <div class="inline-edit">
+        <textarea id="edit-notes" rows="4" placeholder="Enter notes...">{{ watch.notes if watch.notes is not none else '' }}</textarea>
+        <span class="edit-error" id="error-notes"></span>
+      </div>
+    </div>
+
+    <div class="inline-edit-group">
+      <label></label>
+      <div class="inline-edit">
+        <button class="btn-save" onclick="saveAll()">Save</button>
+        <span class="edit-error" id="error-save"></span>
+      </div>
+    </div>
+  </div>
+
+  {% if watch.notes %}
+  <div class="watch-detail-section" id="notes-section">
+    <h2>Notes</h2>
+    <div class="notes-content" id="notes-display">{{ watch.notes }}</div>
+  </div>
+  {% else %}
+  <div class="watch-detail-section" id="notes-section" style="display:none">
+    <h2>Notes</h2>
+    <div class="notes-content" id="notes-display"></div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function formatMoney(val) {
+  if (val === null || val === undefined || val === '') return '';
+  return '$' + parseFloat(val).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function saveAll() {
+  const msrpRaw = document.getElementById('edit-msrp').value.trim();
+  const mvRaw = document.getElementById('edit-market-value').value.trim();
+  const mvSourceRaw = document.getElementById('edit-mv-source').value;
+  const refRaw = document.getElementById('edit-reference-number').value.trim();
+  const mfgUrlRaw = document.getElementById('edit-manufacturer-url').value.trim();
+  const notesRaw = document.getElementById('edit-notes').value;
+  const errorEl = document.getElementById('error-save');
+  errorEl.textContent = '';
+
+  const body = {
+    msrp: msrpRaw === '' ? null : msrpRaw,
+    market_value: mvRaw === '' ? null : mvRaw,
+    market_value_source: mvSourceRaw === '' ? null : mvSourceRaw,
+    reference_number: refRaw === '' ? null : refRaw,
+    manufacturer_url: mfgUrlRaw === '' ? null : mfgUrlRaw,
+    notes: notesRaw === '' ? null : notesRaw
+  };
+
+  fetch('/api/watch/{{ watch.slug }}/user-data', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (!data.ok) {
+      errorEl.textContent = data.error;
+      return;
+    }
+
+    // Update MSRP display
+    const msrpDisplay = document.getElementById('msrp-display');
+    const msrpValue = document.getElementById('msrp-value');
+    if (data.msrp !== null && data.msrp !== undefined) {
+      msrpValue.textContent = formatMoney(data.msrp);
+      msrpDisplay.style.display = '';
+    } else {
+      msrpDisplay.style.display = 'none';
+    }
+
+    // Update Market Value display
+    const mvDisplay = document.getElementById('mv-display');
+    const mvValue = document.getElementById('mv-value');
+    const mvSource = document.getElementById('mv-source-display');
+    if (data.market_value !== null && data.market_value !== undefined) {
+      mvValue.textContent = formatMoney(data.market_value);
+      mvSource.textContent = data.market_value_source ? '(' + data.market_value_source + ')' : '';
+      mvDisplay.style.display = '';
+    } else {
+      mvDisplay.style.display = 'none';
+    }
+
+    // Update Reference Number display
+    const refDisplay = document.getElementById('ref-display');
+    const refValue = document.getElementById('ref-value');
+    if (data.reference_number !== null && data.reference_number !== undefined && data.reference_number !== '') {
+      refValue.textContent = data.reference_number;
+      refDisplay.style.display = '';
+    } else {
+      refDisplay.style.display = 'none';
+    }
+
+    // Update Manufacturer URL display
+    const mfgDisplay = document.getElementById('mfg-url-display');
+    const mfgLink = document.getElementById('mfg-url-link');
+    if (data.manufacturer_url !== null && data.manufacturer_url !== undefined && data.manufacturer_url !== '') {
+      mfgLink.href = data.manufacturer_url;
+      mfgDisplay.style.display = '';
+    } else {
+      mfgDisplay.style.display = 'none';
+    }
+
+    // Update Notes display
+    const notesSection = document.getElementById('notes-section');
+    const notesDisplay = document.getElementById('notes-display');
+    if (data.notes !== null && data.notes !== undefined && data.notes !== '') {
+      notesDisplay.textContent = data.notes;
+      notesSection.style.display = '';
+    } else {
+      notesSection.style.display = 'none';
+    }
+
+    errorEl.textContent = '✓ Saved';
+    setTimeout(() => { errorEl.textContent = ''; }, 2000);
+  })
+  .catch(err => {
+    errorEl.textContent = 'Failed to save';
+  });
+}
+</script>
+{% endblock %}

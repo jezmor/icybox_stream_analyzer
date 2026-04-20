@@ -1,18 +1,16 @@
-Welcome to my vibecoded, overengineered solution to a simple question: what is the EV (Expected Value) of a wristwatch lootbox I got an ad for?
-
 # IcyBox Stream Analyzer
 
-A CLI tool that connects to the [IcyBox](https://www.icybox.io) activity stream, collects box-opening events in real time, and stores everything in a SQLite database for analysis.
+A CLI tool that connects to the [IcyBox](https://www.icybox.io) activity stream, collects box-opening events in real time, and stores everything in a SQLite database for analysis. Includes a Flask dashboard for browsing the watch catalog, viewing analytics, and simulating box opens.
 
 ## What it does
 
 - **Collects** live box-opening events via SSE (Server-Sent Events) or polling
 - **Persists** events to a local JSONL file with deduplication
-- **Saves rejected events** to a separate file so nothing from the stream is ever lost
 - **Builds a SQLite database** with watches, events, boxes, rarities, stated odds, and grail watch listings
 - **Scrapes IcyBox website** for stated odds and grail watches, tracking changes over time
 - **Downloads watch images** organized by price bucket
-- **SQL queries** for analysis: profit by tier, rarity drift, user P&L, watch catalog, and more
+- **Dashboard** for browsing watches, viewing drop stats, analytics, and simulating box opens
+- **SQL queries** for analysis: profit by tier, rarity drift, user P&L, and more
 
 ## Setup
 
@@ -21,18 +19,16 @@ A CLI tool that connects to the [IcyBox](https://www.icybox.io) activity stream,
 npm install
 npm run build
 
-# Tools (Python)
+# Tools + Dashboard (Python)
 python3 -m venv .venv
 source .venv/bin/activate
-pip install playwright
+pip install flask playwright
 python -m playwright install chromium
 ```
 
 ## Usage
 
 ### 1. Collect events
-
-Start the collector to stream live events into a local file:
 
 ```bash
 node dist/cli.js collect
@@ -43,11 +39,7 @@ Options:
 - `--mode <mode>` — `sse` (default) or `polling`
 - `--interval <seconds>` — polling interval (default: 30)
 
-Press `Ctrl+C` to stop. Handles reconnection with exponential backoff and HTTP 429 rate limits.
-
 ### 2. Build the database
-
-Ingest collected events into SQLite and download watch images:
 
 ```bash
 source .venv/bin/activate
@@ -66,89 +58,74 @@ python tools/scrape_boxes.py --output '/Volumes/Crucial X9/projects/icybox_strea
 python tools/sync_db.py --input ./icybox-data.jsonl --output '/Volumes/Crucial X9/projects/icybox_stream'
 ```
 
-### 5. Analyze with SQL
-
-Open `icybox.db` in [DB Browser for SQLite](https://sqlitebrowser.org/) and run queries from the `queries/` folder.
-
-## Database schema
-
-| Table | Description |
-|-------|-------------|
-| **events** | Every raw stream event with all fields |
-| **watches** | Deduplicated watch catalog (one row per unique watch) |
-| **boxes** | Box tiers with names, slugs, current price, deprecation tracking |
-| **rarities** | Rarity keys with full and short names |
-| **box_pricing** | Versioned box prices with effective date ranges |
-| **stated_odds** | Advertised odds from the website, versioned with effective dates |
-| **listed_watches** | Grail watches from box pages, with delisting tracking |
-
-Boxes and rarities are discovered automatically from events — no hardcoded lists. The scraper updates prices, odds, and grail listings from the website, versioning changes over time.
-
-## Queries
-
-Pre-built SQL queries in `queries/`:
-
-| Query | Description |
-|-------|-------------|
-| `profit-by-tier.sql` | P&L breakdown per box tier (time-aware pricing) |
-| `profit-total.sql` | Grand total across all boxes (time-aware pricing) |
-| `rarity-odds-per-box.sql` | Observed drop rates per tier |
-| `rarity-drift-by-period.sql` | Stated vs observed odds with drift per time period |
-| `top-users.sql` | Leaderboard with per-tier breakdown |
-| `user-loss.sql` | Per-event P&L with running total per user |
-| `watch-drops-per-tier.sql` | Complete watch catalog with rarity and drop counts per tier |
-
-## Data format
-
-Events are stored as JSON Lines (`.jsonl`), one event per line:
-
-```json
-{
-  "id": "abc123",
-  "username": "player1",
-  "platform": "web",
-  "boxName": "Gold Box",
-  "boxSlug": "gold-box",
-  "itemName": "Diamond Watch",
-  "itemValue": 150.50,
-  "rarity": "chronograph",
-  "rarityColor": "#FFD700",
-  "itemImageUrl": "https://example.com/watch.png",
-  "acquiredAt": "2024-01-15T10:30:00.000Z",
-  "collectedAt": "2024-01-15T10:30:05.123Z"
-}
-```
-
-Rejected events are saved to `*-rejected.jsonl` so nothing is ever discarded.
-
-## Architecture
-
-```
-src/
-├── cli.ts                    # CLI entry point (collector only)
-├── types.ts                  # Shared types and interfaces
-└── collector/
-    ├── sse-client.ts         # SSE connection with backoff
-    ├── polling-client.ts     # Polling alternative
-    ├── event-parser.ts       # Event validation and parsing
-    ├── deduplicator.ts       # In-memory ID deduplication
-    ├── data-writer.ts        # JSONL append writer
-    └── backoff.ts            # Exponential backoff calculator
-
-tools/
-├── build_db.py               # JSONL → SQLite ingestion + image downloads
-├── scrape_boxes.py           # Website scraper for odds and grail watches
-├── sync_db.py                # Runs build_db + scrape_boxes in sequence
-└── jsonl_to_csv.py           # JSONL → CSV converter
-
-queries/                      # Pre-built SQL queries for analysis
-```
-
-## Development
+### 5. Browse the dashboard
 
 ```bash
-npm run build    # Compile TypeScript
-npm test         # Run tests
+.venv/bin/python web/dashboard/app.py \
+  --db '/Volumes/Crucial X9/projects/icybox_stream/icybox.db' \
+  --images '/Volumes/Crucial X9/projects/icybox_stream/images'
+```
+
+Open http://localhost:5000. See [web/README.md](web/README.md) for full dashboard docs.
+
+### 6. Analyze with SQL
+
+Open `icybox.db` in [DB Browser for SQLite](https://sqlitebrowser.org/) and run queries from `web/queries/`.
+
+## Project Structure
+
+```
+src/                          # Node.js event collector
+├── cli.ts
+├── types.ts
+└── collector/
+    ├── sse-client.ts
+    ├── polling-client.ts
+    ├── event-parser.ts
+    ├── deduplicator.ts
+    ├── data-writer.ts
+    └── backoff.ts
+
+tools/                        # Python DB build + scraping tools
+├── build_db.py
+├── scrape_boxes.py
+├── sync_db.py
+└── build_site.py
+
+web/                          # Dashboard, queries, static site
+├── dashboard/                # Flask app
+│   ├── app.py
+│   ├── static/
+│   ├── templates/
+│   └── test_*.py
+├── queries/                  # SQL analytics (loaded at runtime)
+└── site/                     # Static site output
+```
+
+## Database Schema
+
+| Table | Managed by | Description |
+|-------|-----------|-------------|
+| **events** | build_db | Every raw stream event |
+| **watches** | build_db | Deduplicated watch catalog |
+| **boxes** | build_db | Box tiers (discovered from events) |
+| **rarities** | build_db | Rarity keys (discovered from events) |
+| **box_pricing** | scrape_boxes | Versioned box prices |
+| **stated_odds** | scrape_boxes | Advertised odds, versioned |
+| **listed_watches** | scrape_boxes | Grail watches with delisting tracking |
+| **user_watch_data** | dashboard | User-entered MSRP, market value, notes, etc. |
+| **user_simulation** | dashboard | Simulated box opens |
+
+See [tools/README.md](tools/README.md) for the full ER diagram.
+
+## Tests
+
+```bash
+# Collector tests
+npm test
+
+# Dashboard tests
+.venv/bin/python -m pytest web/dashboard/ -v
 ```
 
 ## License

@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Watch Catalog — IcyBox{% endblock %}
+{% block content %}
+<div class="header">
+  <h1>Watch Catalog</h1>
+  <div class="stats">{{ stats.watches }} watches &middot; {{ stats.events | int }} events &middot; {{ stats.users | int }} users</div>
+</div>
+
+<div class="filters">
+  <label>Box:</label>
+  <select id="filterTier">
+    <option value="">All</option>
+    <option value="tier-bronze"{% if filters.tier == 'Bronze' %} selected{% endif %}>Bronze</option>
+    <option value="tier-silver"{% if filters.tier == 'Silver' %} selected{% endif %}>Silver</option>
+    <option value="tier-gold"{% if filters.tier == 'Gold' %} selected{% endif %}>Gold</option>
+    <option value="tier-icy"{% if filters.tier == 'Icy' %} selected{% endif %}>Icy</option>
+  </select>
+
+  <label>Rarity:</label>
+  <select id="filterRarity">
+    <option value="">All</option>
+    <option value="rarity-quartz">Quartz</option>
+    <option value="rarity-automatic">Automatic</option>
+    <option value="rarity-chronograph">Chronograph</option>
+    <option value="rarity-tourbillon">Tourbillon</option>
+    <option value="rarity-grand_tourbillon">Grand Tourbillon</option>
+    <option value="rarity-grail">Grail</option>
+  </select>
+
+  <label>Search:</label>
+  <input type="text" id="filterSearch" placeholder="Watch name..." value="{{ filters.search or '' }}">
+
+  <label>Sort:</label>
+  <select id="sortBy">
+    <option value="value-desc"{% if filters.sort == 'value-desc' %} selected{% endif %}>Value (high → low)</option>
+    <option value="value-asc"{% if filters.sort == 'value-asc' %} selected{% endif %}>Value (low → high)</option>
+    <option value="drops-desc"{% if filters.sort == 'drops-desc' %} selected{% endif %}>Drops (most)</option>
+    <option value="drops-asc"{% if filters.sort == 'drops-asc' %} selected{% endif %}>Drops (least)</option>
+    <option value="newest"{% if filters.sort == 'newest' %} selected{% endif %}>Newest</option>
+  </select>
+</div>
+
+<div class="grid" id="grid">
+  {% for w in watches %}
+  <div class="card{% if w.bronze %} tier-bronze{% endif %}{% if w.silver %} tier-silver{% endif %}{% if w.gold %} tier-gold{% endif %}{% if w.icy %} tier-icy{% endif %}{% if w.bronze %} rarity-{{ w.bronze }}{% endif %}{% if w.silver %} rarity-{{ w.silver }}{% endif %}{% if w.gold %} rarity-{{ w.gold }}{% endif %}{% if w.icy %} rarity-{{ w.icy }}{% endif %}" data-value="{{ w.value }}" data-drops="{{ w.total_drops }}" data-first-seen="{{ w.first_seen or '' }}">
+    <div class="card-image">
+      {% if w.image_path %}
+      <a href="/watch/{{ w.slug }}"><img src="/images/{{ w.image_path }}" alt="{{ w.name }}" loading="lazy"></a>
+      {% else %}
+      <a href="/watch/{{ w.slug }}"><div class="no-image">No Image</div></a>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <div class="card-name"><a href="/watch/{{ w.slug }}">{{ w.name }}</a></div>
+      <div class="card-value">{{ w.value | format_money }}</div>
+      {% if w.msrp is not none %}
+      <div class="card-msrp">MSRP: {{ w.msrp | format_money }}</div>
+      {% endif %}
+      {% if w.market_value is not none %}
+      <div class="card-market-value">Market: {{ w.market_value | format_money }}</div>
+      {% endif %}
+      <div class="card-badges">
+        {% if w.bronze %}
+        <span class="badge" style="background:{{ rarity_color(w.bronze) }}" title="Bronze: {{ w.bronze | replace('_', ' ') | title }}{% if w.bronze_count > 0 %} ({{ w.bronze_count }}){% endif %}">B</span>
+        {% endif %}
+        {% if w.silver %}
+        <span class="badge" style="background:{{ rarity_color(w.silver) }}" title="Silver: {{ w.silver | replace('_', ' ') | title }}{% if w.silver_count > 0 %} ({{ w.silver_count }}){% endif %}">S</span>
+        {% endif %}
+        {% if w.gold %}
+        <span class="badge" style="background:{{ rarity_color(w.gold) }}" title="Gold: {{ w.gold | replace('_', ' ') | title }}{% if w.gold_count > 0 %} ({{ w.gold_count }}){% endif %}">G</span>
+        {% endif %}
+        {% if w.icy %}
+        <span class="badge" style="background:{{ rarity_color(w.icy) }}" title="Icy: {{ w.icy | replace('_', ' ') | title }}{% if w.icy_count > 0 %} ({{ w.icy_count }}){% endif %}">I</span>
+        {% endif %}
+        {% if w.source == 'listed' %}
+        <span class="source-badge listed">Listed Only</span>
+        {% endif %}
+      </div>
+      <div class="card-drops">{{ w.total_drops }} drops</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<script>
+const grid = document.getElementById('grid');
+const cards = [...grid.querySelectorAll('.card')];
+const filterTier = document.getElementById('filterTier');
+const filterRarity = document.getElementById('filterRarity');
+const filterSearch = document.getElementById('filterSearch');
+const sortBy = document.getElementById('sortBy');
+
+function applyFilters() {
+  const tier = filterTier.value;
+  const rarity = filterRarity.value;
+  const search = filterSearch.value.toLowerCase();
+  const sort = sortBy.value;
+
+  cards.forEach(card => {
+    const matchTier = !tier || card.classList.contains(tier);
+    const matchRarity = !rarity || card.classList.contains(rarity);
+    const matchSearch = !search || card.querySelector('.card-name').textContent.toLowerCase().includes(search);
+    card.classList.toggle('hidden', !(matchTier && matchRarity && matchSearch));
+  });
+
+  const visible = cards.filter(c => !c.classList.contains('hidden'));
+  visible.sort((a, b) => {
+    const av = parseFloat(a.dataset.value);
+    const bv = parseFloat(b.dataset.value);
+    const ad = parseInt(a.dataset.drops);
+    const bd = parseInt(b.dataset.drops);
+    if (sort === 'value-desc') return bv - av;
+    if (sort === 'value-asc') return av - bv;
+    if (sort === 'drops-desc') return bd - ad;
+    if (sort === 'drops-asc') return ad - bd;
+    if (sort === 'newest') {
+      const af = a.dataset.firstSeen || '';
+      const bf = b.dataset.firstSeen || '';
+      return bf.localeCompare(af);
+    }
+    return 0;
+  });
+  visible.forEach(card => grid.appendChild(card));
+  cards.filter(c => c.classList.contains('hidden')).forEach(c => grid.appendChild(c));
+}
+
+filterTier.addEventListener('change', applyFilters);
+filterRarity.addEventListener('change', applyFilters);
+filterSearch.addEventListener('input', applyFilters);
+sortBy.addEventListener('change', applyFilters);
+</script>
+{% endblock %}

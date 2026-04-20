@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}{{ data.tier }} Box — IcyBox{% endblock %}
+{% block content %}
+<div class="header">
+  <h1>{{ data.box_name }}</h1>
+  <div class="stats">
+    {% if data.box_price is not none %}Price: {{ data.box_price | format_money }} &middot; {% endif %}
+    {{ data.total_opens | int }} total opens
+  </div>
+</div>
+
+{% if data.stated_odds %}
+<div class="box-section">
+  <h2>Stated Odds</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Rarity</th>
+        <th>Odds</th>
+        <th>Min Value</th>
+        <th>Max Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in data.stated_odds %}
+      <tr>
+        <td><span class="badge" style="background:{{ rarity_color(o.rarity_key) }}">{{ o.rarity_label }}</span></td>
+        <td>{{ o.odds_pct | format_pct }}</td>
+        <td>{{ o.min_value | format_money }}</td>
+        <td>{{ o.max_value | format_money }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="filters" style="border-bottom:none">
+  <label>Search:</label>
+  <input type="text" id="boxSearch" placeholder="Watch name..." oninput="filterBoxWatches()">
+  <label>Sort:</label>
+  <select id="boxSort" onchange="filterBoxWatches()">
+    <option value="drops-desc">Drops (most)</option>
+    <option value="drops-asc">Drops (least)</option>
+    <option value="value-desc">Value (high → low)</option>
+    <option value="value-asc">Value (low → high)</option>
+    <option value="rate-desc">Drop Rate (high → low)</option>
+    <option value="rate-asc">Drop Rate (low → high)</option>
+  </select>
+</div>
+
+{% set odds_map = {} %}
+{% set rarity_order = [] %}
+{% for o in data.stated_odds %}
+{% set _ = odds_map.update({o.rarity_key: o.odds_pct}) %}
+{% if o.rarity_key in data.rarity_groups %}
+{% set _ = rarity_order.append(o.rarity_key) %}
+{% endif %}
+{% endfor %}
+{# Add any rarity groups not in stated_odds at the end #}
+{% for rk in data.rarity_groups.keys() %}
+{% if rk not in rarity_order %}
+{% set _ = rarity_order.append(rk) %}
+{% endif %}
+{% endfor %}
+
+{% for rarity_key in rarity_order %}
+{% set watches = data.rarity_groups[rarity_key] %}
+{% set rarity_total = watches | sum(attribute='drop_count') %}
+<div class="box-section collapsible-section">
+  <h2 class="rarity-header section-toggle" style="color:{{ rarity_color(rarity_key) }}" onclick="toggleSection(this)">
+    <span class="toggle-arrow">▼</span> {{ rarity_key | replace('_', ' ') | title }}{% if rarity_key in odds_map %}: {{ odds_map[rarity_key] | format_pct }}{% endif %} <span class="section-count">({{ watches | length }})</span>
+  </h2>
+  <div class="watch-list section-body">
+    {% for w in watches %}
+    {% set rarity_pct = (w.drop_count / rarity_total * 100) if rarity_total > 0 else 0 %}
+    <div class="watch-row" data-name="{{ w.name | lower }}" data-drops="{{ w.drop_count }}" data-value="{{ w.value }}" data-rate="{{ rarity_pct }}">
+      <div class="watch-row-thumb">
+        {% if w.image_path %}
+        <a href="/watch/{{ w.slug }}"><img src="/images/{{ w.image_path }}" alt="{{ w.name }}"></a>
+        {% else %}
+        <div class="no-image-sm">?</div>
+        {% endif %}
+      </div>
+      <div class="watch-row-info">
+        <a href="/watch/{{ w.slug }}" class="watch-row-name">{{ w.name }}</a>
+        <span class="watch-row-value">{{ w.value | format_money }}</span>
+        {% if w.msrp is not none %}
+        <span class="watch-row-price">MSRP: {{ w.msrp | format_money }}</span>
+        {% endif %}
+        {% if w.market_value is not none %}
+        <span class="watch-row-price">Market: {{ w.market_value | format_money }}</span>
+        {% endif %}
+        <span class="watch-row-drops">{{ w.drop_count }} drops</span>
+      </div>
+      <div class="pct-bar-container">
+        <div class="pct-bar" style="width:{{ rarity_pct }}%;background:{{ rarity_color(rarity_key) }}"></div>
+        <span class="pct-label">{{ rarity_pct | format_pct }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+
+{% if data.listed_only %}
+<div class="box-section collapsible-section">
+  <h2 class="rarity-header section-toggle" style="color:{{ rarity_color('grail') }}" onclick="toggleSection(this)">
+    <span class="toggle-arrow">▼</span> Listed Only (Grails) <span class="section-count">({{ data.listed_only | length }})</span>
+  </h2>
+  <div class="watch-list section-body">
+    {% for w in data.listed_only %}
+    <div class="watch-row" data-name="{{ w.name | lower }}" data-drops="0" data-value="{{ w.value }}" data-rate="0">
+      <div class="watch-row-thumb">
+        {% if w.image_path %}
+        <a href="/watch/{{ w.slug }}"><img src="/images/{{ w.image_path }}" alt="{{ w.name }}"></a>
+        {% else %}
+        <div class="no-image-sm">?</div>
+        {% endif %}
+      </div>
+      <div class="watch-row-info">
+        <a href="/watch/{{ w.slug }}" class="watch-row-name">{{ w.name }}</a>
+        <span class="watch-row-value">{{ w.value | format_money }}</span>
+        {% if w.msrp is not none %}
+        <span class="watch-row-price">MSRP: {{ w.msrp | format_money }}</span>
+        {% endif %}
+        {% if w.market_value is not none %}
+        <span class="watch-row-price">Market: {{ w.market_value | format_money }}</span>
+        {% endif %}
+        <span class="source-badge listed">Listed Only</span>
+      </div>
+      <div class="pct-bar-container">
+        <div class="pct-bar" style="width:0%;background:{{ rarity_color('grail') }}"></div>
+        <span class="pct-label">0.00%</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<script>
+function toggleSection(header) {
+  const section = header.closest('.collapsible-section');
+  const body = section.querySelector('.section-body');
+  const arrow = header.querySelector('.toggle-arrow');
+  if (body.style.display === 'none') {
+    body.style.display = '';
+    arrow.textContent = '▼';
+  } else {
+    body.style.display = 'none';
+    arrow.textContent = '▶';
+  }
+}
+
+function filterBoxWatches() {
+  const q = document.getElementById('boxSearch').value.toLowerCase();
+  const sort = document.getElementById('boxSort').value;
+
+  document.querySelectorAll('.section-body').forEach(list => {
+    const rows = [...list.querySelectorAll('.watch-row')];
+
+    rows.forEach(row => {
+      const name = row.dataset.name;
+      row.style.display = (!q || name.includes(q)) ? '' : 'none';
+    });
+
+    const visible = rows.filter(r => r.style.display !== 'none');
+    visible.sort((a, b) => {
+      const av = parseFloat(a.dataset.value);
+      const bv = parseFloat(b.dataset.value);
+      const ad = parseInt(a.dataset.drops);
+      const bd = parseInt(b.dataset.drops);
+      const ar = parseFloat(a.dataset.rate);
+      const br = parseFloat(b.dataset.rate);
+      if (sort === 'drops-desc') return bd - ad;
+      if (sort === 'drops-asc') return ad - bd;
+      if (sort === 'value-desc') return bv - av;
+      if (sort === 'value-asc') return av - bv;
+      if (sort === 'rate-desc') return br - ar;
+      if (sort === 'rate-asc') return ar - br;
+      return 0;
+    });
+    visible.forEach(r => list.appendChild(r));
+    rows.filter(r => r.style.display === 'none').forEach(r => list.appendChild(r));
+  });
+}
+</script>
+{% endblock %}
